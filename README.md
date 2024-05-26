@@ -1,2 +1,2 @@
 # EWM2024
-Lecture Energiewandlungsmaschinen led by Professor Dieter Brillert and Katharina Tegethoff, it is part of the project to design a small windturbine of about 400W. This is an appraoch of solving preliminary blade design optimization problem for the low wind speed regime based on BEMT and other theories.  
+Lecture Energiewandlungsmaschinen led by Professor Dieter Brillert and Katharina Tegethoff at the [Chair of Turbomachinery](https://www.uni-due.de/tm/), University Duisburg Essen. It is part of student project to design a small windturbine of about 400W. And this repository contains an appraoch of solving preliminary blade design optimization problem for the low wind speed regime based on BEMT and other theories.  
