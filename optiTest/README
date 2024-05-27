@@ -1,0 +1,16 @@
+This is an approach to solve optimization problem of small wind turbine prelimenary design 
+
+[WE ARE HERE]1. BEMT is implemented [testing DONE, validation phase...]
+   - most inner loop
+   - allowed for differential programming
+   - contains important assumptions and scientific formulations
+   
+2. Construction of BEMT for the whole blade containing multiple sections with different  geometric properties and airfoil profile
+
+3. Formulation of optimization problem as a whole
+
+4. incooperating basic structure analysis, accustic calculation as constraint 
+
+5. Optimization programm test, validation needed 
+
+6. Apply to chosen geometries, airfoils, optimizatin strategies
