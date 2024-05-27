@@ -1,10 +1,14 @@
 This is an approach to solve optimization problem of small wind turbine prelimenary design 
 
 [WE ARE HERE]1. BEMT is implemented [testing DONE, validation phase...]
-   [X]- most inner loop
-   [X]- allowed for differential programming
-   [X]- contains important assumptions and scientific formulations
-   [ ]- implement tip-hub loss factor
+   [X]- implement BEMT solver wihtout correction in momentum theory regime in corrected coord system
+   	- no limitm interpolation scheme 
+   	- all formulations
+   [X]- implement BEMT solver without correction in multi regime
+   	- based on NING2020 implement Buhl continuous empirical regime and PB regime
+   [ ]- implement loss factor F due to rotational aerodynamic
+   	- Prandtl tip hub loss factor
+   [ ]- implement Re correction to CL CD 
    
    note that only ./1DBEMTMultiSectionValidation2notebook.jl contains the latest correct implementation
 
