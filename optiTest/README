@@ -1,6 +1,6 @@
 This is an approach to solve optimization problem of small wind turbine prelimenary design 
 
-[WE ARE HERE]1. BEMT is implemented [testing DONE, validation phase...]
+[WE ARE HERE]1. Implementation of a "2D BEMT" solver
    [X]- implement BEMT solver wihtout correction in momentum theory regime in corrected coord system
    	- no limitm interpolation scheme 
    	- all formulations
@@ -9,10 +9,15 @@ This is an approach to solve optimization problem of small wind turbine prelimen
    [ ]- implement loss factor F due to rotational aerodynamic
    	- Prandtl tip hub loss factor
    [ ]- implement Re correction to CL CD 
+   [ ]- test and validate with other solver (Qblade, CCblade)
+   
+   additionally:
+   [ ]- implement numerical integration methods of thrust, torque, and power
+   [ ]- implement various dimensionless quantities (such as thrust coefficient, power coefficient, some other crazy long common used metrics found in Durand1935)
    
    note that only ./1DBEMTMultiSectionValidation2notebook.jl contains the latest correct implementation
 
-2. Construction of BEMT for the whole blade containing multiple sections with different  geometric properties and airfoil profile
+2. Construct based on real application (geometry, profiles of our small windturbine), try to get close to given performance sheet 
 
 3. Formulation of optimization problem as a whole
 
