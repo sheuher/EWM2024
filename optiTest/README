@@ -1,10 +1,11 @@
 This is an approach to solve optimization problem of small wind turbine prelimenary design 
 
 [WE ARE HERE]1. BEMT is implemented [testing DONE, validation phase...]
-   - most inner loop
-   - allowed for differential programming
-   - contains important assumptions and scientific formulations
-   
+   [X]- most inner loop
+   [X]- allowed for differential programming
+   [X]- contains important assumptions and scientific formulations
+   [ ]- implement tip-hub loss factor
+
 2. Construction of BEMT for the whole blade containing multiple sections with different  geometric properties and airfoil profile
 
 3. Formulation of optimization problem as a whole
