@@ -42,11 +42,12 @@ begin
 	end
 	
 	function interpCLCDstruct(airfoil::AirfoilData)
-		(alpha) -> begin
-			linear_interpolation(airfoil.alphas, airfoil.CLs)(alphaShifter(alpha))
-		end, (alpha) -> begin
-			linear_interpolation(airfoil.alphas, airfoil.CDs)(alphaShifter(alpha))
-		end
+		interpStruct(airfoil.alphas, airfoil.CLs), interpStruct(airfoil.alphas, airfoil.CDs)
+	end
+
+	function interpStruct(alphas::AbstractVector, y::AbstractVector)
+		# linear interpolation with periodic phase shift correction 
+		(x) -> linear_interpolation(alphas,y)(alphaShifter(x))
 	end
 	
 	function alphaShifter(alpha)
@@ -62,10 +63,7 @@ begin
 		F :: Function
 		sigmaPrime :: Float64
 	end
-	Section(r,chord,theta,airfoil::AirfoilData,rotor::Rotor) = Section( r,chord,theta,
-	                                                                    interpCLCDstruct(airfoil)..., 
-	                                                                    (r)->1, 
-	                                                                    rotor.N*chord/(2*pi*r) )
+	Section(r,chord,theta,airfoil::AirfoilData,rotor::Rotor) = Section( r,chord,theta,interpCLCDstruct(airfoil)..., (r)->1, rotor.N*chord/(2*pi*r) )
 	
 	
 	struct OpCond
@@ -102,8 +100,11 @@ begin
 		CD = section.CD(alpha)
 		Cn = calc_Cn(phi, CL, CD)
 		Ct = calc_Ct(phi, CL, CD)
-		a = calc_a(phi, section.F(section.r), section.sigmaPrime, Cn)
-		aPrime = calc_a′(phi, section.F(section.r), section.sigmaPrime, Ct)
+		
+		kappa = calc_kappa(phi, section.F(section.r), section.sigmaPrime, Cn)
+		a = calc_a(kappa)
+		kappaPrime = calc_kappaPrime(phi, section.F(section.r), section.sigmaPrime, Ct)
+		aPrime = calc_aPrime(kappaPrime)
 		
 		# 	calculate W
 		W = calc_W(op.Vinf, op.Omega, section.r, a, aPrime)
@@ -120,9 +121,12 @@ begin
 	#################################################
 	
 	calc_Cn(ϕ, CL, CD) = CL *cos(ϕ) - CD *sin(ϕ)
-	calc_Ct(ϕ, CL, CD) = - CL *sin(ϕ) + CD *cos(ϕ)
-	calc_a(ϕ, F, σ′, Cn) = ( 1 - 4*F*(sin(ϕ))^2 /(σ′*Cn) )^-1
-	calc_a′(ϕ, F, σ′, Ct) = ( 4 *F*sin(ϕ)*cos(ϕ) /(σ′*Ct) - 1 )^-1
+	calc_Ct(ϕ, CL, CD) = -CL *sin(ϕ) - CD *cos(ϕ)
+
+	calc_kappa(ϕ, F, σ′, Cn) = (σ′*Cn) / (4*F*(sin(ϕ))^2)
+	calc_kappaPrime(ϕ, F, σ′, Ct) = (-σ′*Ct) / (4 *F*sin(ϕ)*cos(ϕ))
+	calc_a(κ) = κ / (1 +κ)
+	calc_aPrime(κ′) = κ′ / (1 -κ′)
 	
 	calc_W(Uinf, Ω, r, a, a′) = sqrt(Uinf^2 *(1 -a)^2 + (Ω*r*(1 +a′))^2)
 	calc_T(N, Cn, ρ, W, c, r) = N*Cn*0.5*ρ*W^2*c*r
@@ -146,13 +150,15 @@ begin
 		Ct = calc_Ct(ϕ, CL, CD) 
 	
 		# calculate a (according to Nings2020 derivation)
-		a = calc_a(ϕ, F, σ′, Cn)
+		κ = calc_kappa(ϕ, F, σ′, Cn)
+		a = calc_a(κ)
 	
 		# calculate a' (according to Nings2020 derivation)
-		a′ = calc_a′(ϕ, F, σ′, Ct)
+		κ′ = calc_kappaPrime(ϕ, F, σ′, Ct)
+		a′ = calc_aPrime(κ′)
 		
 		# return Residual
-		return sin(ϕ)/(a -1) - Uinf*cos(ϕ) /(Ω*r*(1-a′)) 
+		return sin(ϕ)/(a -1) - Uinf*cos(ϕ) /(Ω*r*(1 +a′)) 
 	end
 	
 	function solve_R(Rfunc::Function)
@@ -176,8 +182,8 @@ end
 # ╔═╡ ef399a25-87b2-457c-83c3-7cb757ed74f8
 begin
 	interptest = interpCLCDstruct(airfoildata)
-	p1 = scatter(-10pi:0.01:10pi, d->interptest[1](d), size=(1000,500))
-	p2 = scatter(-2pi:0.01:2pi, d->interptest[2](d), size=(1000,500))
+	p1 = scatter(-10pi:0.01:10pi, d->interptest[1](d), size=(1000,500), ms=1)
+	p2 = scatter(-2pi:0.01:2pi, d->interptest[2](d), size=(1000,500), ms=1)
 
 	plot(p1,p2,layout=(2,1))
 end
@@ -247,7 +253,7 @@ begin
 	#sola.W[1]
 	
 	println("Thrust = $(sum(sola.Tprime) *(rs[2]-rs[1]))")
-	println("Qprime = $(sum(sola.Qprime) *(rs[2]-rs[1]))")
+	println("Torque = $(sum(sola.Qprime) *(rs[2]-rs[1]))")
 	println("Power = $(sum(sola.Qprime) *(rs[2]-rs[1]) *op.Omega)")
 	#sola.alpha .*180/pi
 	
@@ -261,7 +267,7 @@ begin
 end
 
 # ╔═╡ e446c57f-e1e4-4616-a706-85ac14bbcd86
-sola.RFunction[1](-pi/2)
+plot(-pi/2:0.001:pi/2, sola.RFunction[5], ylims=(-5,5))
 
 # ╔═╡ 87346d7f-8a7d-42b0-b95b-fa6d6bf52b5a
 1-0.3
@@ -273,6 +279,6 @@ sola.RFunction[1](-pi/2)
 # ╠═ef399a25-87b2-457c-83c3-7cb757ed74f8
 # ╠═bef3ad20-9a9f-4cf2-bf3a-5ffa1b8dc785
 # ╠═b38ebafd-c6e2-4e18-8d63-8b943d7d439b
-# ╠═bb229950-7eaf-4c4c-aa61-9aee13fc1c09
+# ╟─bb229950-7eaf-4c4c-aa61-9aee13fc1c09
 # ╠═e446c57f-e1e4-4616-a706-85ac14bbcd86
 # ╠═87346d7f-8a7d-42b0-b95b-fa6d6bf52b5a
