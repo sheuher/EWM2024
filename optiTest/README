@@ -5,6 +5,8 @@ This is an approach to solve optimization problem of small wind turbine prelimen
    [X]- allowed for differential programming
    [X]- contains important assumptions and scientific formulations
    [ ]- implement tip-hub loss factor
+   
+   note that only ./1DBEMTMultiSectionValidation2notebook.jl contains the latest correct implementation
 
 2. Construction of BEMT for the whole blade containing multiple sections with different  geometric properties and airfoil profile
 
