@@ -90,8 +90,12 @@ begin
 	
 		#   define residual function R(ϕ) = R(ϕ, θ, F, σ′, Uinf, Ω, r, CL(), CD())
 		RFunc(phi) = R(phi, section.theta, section.F(section.r), section.sigmaPrime, op.Vinf, op.Omega, section.r, section.CL, section.CD) 
+
+		#   define residual function RPB(ϕ) = RPB(ϕ, θ, F, σ′, Uinf, Ω, r, CL(), CD()) for propeller brake zone
+		RPBFunc(phi) = RPB(phi, section.theta, section.F(section.r), section.sigmaPrime, op.Vinf, op.Omega, section.r, section.CL, section.CD)
+		
 	    #   solve for R(ϕ*) = 0
-		phi = solve_R(RFunc)
+		phi = solve_BEM(RFunc, RPBFunc)
 	
 	    # 	calculate Cn, Ct, a, a' as function of ϕ*
 		alpha = section.theta - phi
@@ -102,7 +106,7 @@ begin
 		Ct = calc_Ct(phi, CL, CD)
 		
 		kappa = calc_kappa(phi, section.F(section.r), section.sigmaPrime, Cn)
-		a = calc_a(kappa)
+		a = calc_a(kappa, section.F(section.r))
 		kappaPrime = calc_kappaPrime(phi, section.F(section.r), section.sigmaPrime, Ct)
 		aPrime = calc_aPrime(kappaPrime)
 		
@@ -127,6 +131,20 @@ begin
 	calc_kappaPrime(ϕ, F, σ′, Ct) = (-σ′*Ct) / (4 *F*sin(ϕ)*cos(ϕ))
 	calc_a(κ) = κ / (1 +κ)
 	calc_aPrime(κ′) = κ′ / (1 -κ′)
+
+	function calc_a(κ, F)
+		if κ < 2/3
+			# momentum for windmill
+			return κ / (1 +κ) #calc_a(κ)
+		else
+			# empirical with Buhl derivation 
+			γ₁ = 2*F*κ - (10/9 -F)
+			γ₂ = 2*F*κ - F*(4/3 -F)
+			γ₃ = 2*F*κ - (25/9 -2*F)
+			println(2)
+			return (γ₁ -√(γ₂)) / γ₃
+		end
+	end
 	
 	calc_W(Uinf, Ω, r, a, a′) = sqrt(Uinf^2 *(1 -a)^2 + (Ω*r*(1 +a′))^2)
 	calc_T(N, Cn, ρ, W, c, r) = N*Cn*0.5*ρ*W^2*c*r
@@ -151,7 +169,7 @@ begin
 	
 		# calculate a (according to Nings2020 derivation)
 		κ = calc_kappa(ϕ, F, σ′, Cn)
-		a = calc_a(κ)
+		a = calc_a(κ, F)
 	
 		# calculate a' (according to Nings2020 derivation)
 		κ′ = calc_kappaPrime(ϕ, F, σ′, Ct)
@@ -160,14 +178,52 @@ begin
 		# return Residual
 		return sin(ϕ)/(a -1) - Uinf*cos(ϕ) /(Ω*r*(1 +a′)) 
 	end
+
+	function RPB(ϕ, θ, F, σ′, Uinf, Ω, r, interpCL::Function, interpCD::Function)
+		# calculate angle of attack
+		α = θ - ϕ
+	
+		# calculate CL = f(α)
+		CL = interpCL(α)
+	
+		# calculate CD = f(α)
+		CD = interpCD(α)
+	
+		# calculate Cn as ϕ
+		Cn = calc_Cn(ϕ, CL, CD)
+	
+		# calculate Ct as ϕ
+		Ct = calc_Ct(ϕ, CL, CD) 
+	
+		# calculate a (according to Nings2020 derivation)
+		κ = calc_kappa(ϕ, F, σ′, Cn)
+		a = calc_a(κ, F)
+	
+		# calculate a' (according to Nings2020 derivation)
+		κ′ = calc_kappaPrime(ϕ, F, σ′, Ct)
+		a′ = calc_aPrime(κ′)
+		
+		# return Residual
+		return sin(ϕ)/(κ -1) - Uinf*cos(ϕ)*(1 -κ′) /(Ω*r) 
+	end
 	
 	function solve_R(Rfunc::Function)
 		# using Roots's Brent-Dekker method
-		if (Rfunc(-pi/2) > 0) & (Rfunc(-pi/2)*Rfunc(-1e-6) < 0)
-			fzero(Rfunc, (-pi/2, -1e-6), Roots.Brent())
+		fzero(Rfunc, (-pi/2, -1e-6), Roots.Brent())
+	end
+
+	function solve_R(Rfunc::Function, lb, ub)
+		# using Roots's Brent-Dekker method
+		fzero(Rfunc, (lb, ub), Roots.Brent())
+	end
+
+	function solve_BEM(Rfunc::Function, RPBfunc::Function; ϵ=-1e-6)
+		if Rfunc(-π/2) > 0
+			return solve_R(Rfunc,-π/2,ϵ)
+		elseif (RPBfunc(-π/4) < 0) && (RPBfunc(ϵ) > 0)
+			return solve_R(RPBfunc,-π/4,-ϵ)
 		else
-		#	fzero(Rfunc, (-pi/2, -pi), Roots.Brent())
-			999
+			return solve_R(Rfunc,π/2,π)
 		end
 	end
 	
@@ -182,7 +238,7 @@ end
 # ╔═╡ ef399a25-87b2-457c-83c3-7cb757ed74f8
 begin
 	interptest = interpCLCDstruct(airfoildata)
-	p1 = scatter(-10pi:0.01:10pi, d->interptest[1](d), size=(1000,500), ms=1)
+	p1 = scatter(-2pi:0.01:2pi, d->interptest[1](d), size=(1000,500), ms=1)
 	p2 = scatter(-2pi:0.01:2pi, d->interptest[2](d), size=(1000,500), ms=1)
 
 	plot(p1,p2,layout=(2,1))
@@ -197,13 +253,13 @@ begin
 	#################################################
 	#################rotor & op######################
 		
-		Rtip = 0.127
+		Rtip = 1.1
 		Rhub = 0.1*Rtip
 		N = 3
 		rotor = Rotor(Rtip,Rhub,N)
 		
 		#Vinf = 5.0
-		Omega = 5400*pi/30
+		Omega = 12*60*pi/30
 		rho = 1.225
 		op = OpCond(Vinf, Omega, rho)
 		
@@ -266,11 +322,11 @@ begin
 
 end
 
-# ╔═╡ e446c57f-e1e4-4616-a706-85ac14bbcd86
-plot(-pi/2:0.001:pi/2, sola.RFunction[5], ylims=(-5,5))
+# ╔═╡ 5a6ceeb4-19d5-4d56-ba9f-53117cd00425
+i = @bind i Slider(1:18, show_value=true)
 
-# ╔═╡ 87346d7f-8a7d-42b0-b95b-fa6d6bf52b5a
-1-0.3
+# ╔═╡ e446c57f-e1e4-4616-a706-85ac14bbcd86
+plot(-pi/2:0.001:pi/2, sola.RFunction[i], ylims=(-5,5))
 
 # ╔═╡ Cell order:
 # ╠═d9b8d3ee-1b2b-11ef-3574-1991aad1e852
@@ -280,5 +336,5 @@ plot(-pi/2:0.001:pi/2, sola.RFunction[5], ylims=(-5,5))
 # ╠═bef3ad20-9a9f-4cf2-bf3a-5ffa1b8dc785
 # ╠═b38ebafd-c6e2-4e18-8d63-8b943d7d439b
 # ╟─bb229950-7eaf-4c4c-aa61-9aee13fc1c09
+# ╠═5a6ceeb4-19d5-4d56-ba9f-53117cd00425
 # ╠═e446c57f-e1e4-4616-a706-85ac14bbcd86
-# ╠═87346d7f-8a7d-42b0-b95b-fa6d6bf52b5a
