@@ -7,7 +7,7 @@ This is an approach to solve optimization problem of small wind turbine prelimen
    [X]- implement BEMT solver without correction in multi regime
    	- based on NING2020 implement Buhl continuous empirical regime and PB regime
    [ ]- implement loss factor F due to rotational aerodynamic
-   	- Prandtl tip hub loss factor
+   	- Prandtl tip hub loss factor [Prandtl: Aerodynamic theory Springer 1935]
    [ ]- implement Re correction to CL CD 
    [ ]- test and validate with other solver (Qblade, CCblade)
    
