@@ -9,7 +9,8 @@ This is an approach to solve optimization problem of small wind turbine prelimen
    [ ]- implement loss factor F due to rotational aerodynamic
    	- Prandtl tip hub loss factor [Prandtl: Aerodynamic theory Springer 1935]
    [ ]- implement Re correction to CL CD 
-   [ ]- test and validate with other solver (Qblade, CCblade)
+   [~X]- test and validate with other solver (Qblade, CCblade)
+   [ ]- a test case is needed, where changes can be tested again reliably
    
    additionally:
    [ ]- implement numerical integration methods of thrust, torque, and power
