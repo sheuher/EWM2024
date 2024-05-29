@@ -269,7 +269,7 @@ begin
 		rotor = Rotor(Rtip,Rhub,N)
 		
 		Vinf = 10
-		Omega = 12/60*2*pi
+		Omega = 120/60*2*pi
 		rho = 1.225
 		op = OpCond(Vinf, Omega, rho)
 		
@@ -290,9 +290,9 @@ begin
 	    1.00   0.15   -9
 	    ]
 	
-	rs = LinRange( propgeom[1,1], propgeom[2,1], 7 )[2:end-1] *Rtip
-	chords = LinRange( propgeom[1,2], propgeom[2,2], 7 )[2:end-1] *Rtip
-	thetas = LinRange( propgeom[1,3], propgeom[2,3], 7 )[2:end-1] *pi/180
+	rs = LinRange( propgeom[1,1], propgeom[2,1], 102 )[2:end-1] *Rtip
+	chords = LinRange( propgeom[1,2], propgeom[2,2], 102 )[2:end-1] *Rtip
+	thetas = LinRange( propgeom[1,3], propgeom[2,3], 102 )[2:end-1] *pi/180
 end
 
 # ╔═╡ 06546b4a-b706-425e-918a-de0f29a0bc29
@@ -308,6 +308,8 @@ begin
 	#sola.Qprime[1]
 	#sola.W[1]
 
+	KP = -sections[1].sigmaPrime * sola[1].Ct / (4*cos(sola[1].phi)*sin(sola[1].phi))
+	calc_aPrime(KP)
 end
 
 # ╔═╡ ed5d4dd3-af9d-4722-8bc2-54730dd9df48
@@ -333,27 +335,111 @@ begin
 	p6 = scatter(rs, sola.alpha *180/pi, ms=1, label="alpha")
 	p7 = scatter(rs, sola.theta *180/pi, ms=1, label="theta")
 	p4 = scatter(rs, sola.phi *180/pi, ms=1, label="phi") 
-	plot(p7,p4,p6, p5,layout=(4,1), size=(750,750))
+	#plot(p7,p4,p6, p5,layout=(4,1), size=(750,750))
+	1
 	
+end
+
+# ╔═╡ 19e07920-91a6-4150-9104-cd91b9fbd24b
+begin
+	function ThrustTotal(sols, sections, rotor, op)
+		# numerical integration for thrust for linearly spaced radial section
+		rs = [section.r for section in sections]
+		Tfull = [0.; sols.Tprime; 0]
+		rfull = [rotor.Rhub; rs; rotor.Rtip]
+		sum(Tfull) * (rfull[3] - rfull[2])
+	end
+	function TorqueTotal(sols, sections, rotor, op)
+		# numerical integration for thrust for linearly spaced radial section
+		rs = [section.r for section in sections]
+		Qfull = [0.; sols.Qprime; 0]
+		rfull = [rotor.Rhub; rs; rotor.Rtip]
+		sum(Qfull) * (rfull[3] - rfull[2])
+	end
+	function PowerTotal(Torque, Omega)
+		Torque *Omega
+	end
+end
+
+# ╔═╡ cb0c4980-1203-4328-a4a6-c657816ba785
+function turbine(Ω, Vinf; Ncut=102)
+	Rtip = 0.55
+	Rhub = 0.135
+	N = 3
+	rotor = Rotor(Rtip,Rhub,N)
+	
+	Vinf = 10
+	Omega = Ω/60*2*pi
+	rho = 1.225
+	OP = OpCond(Vinf, Omega, rho)
+	propgeom = [
+	    0.135/0.55   0.20   -30
+	    1.00   0.15   -9
+	    ]
+	
+	rs = LinRange( propgeom[1,1], propgeom[2,1], Ncut )[2:end-1] *Rtip
+	chords = LinRange( propgeom[1,2], propgeom[2,2], Ncut )[2:end-1] *Rtip
+	thetas = LinRange( propgeom[1,3], propgeom[2,3], Ncut )[2:end-1] *pi/180
+
+	sections = Section.(rs,chords,thetas,Ref(airfoildata),Ref(rotor))
+	
+	sol = Solve.(Ref(rotor), sections, Ref(OP))
+	
+	sola = StructArray(sol)
+
+	T = ThrustTotal(sola, sections, rotor, OP)
+	M = TorqueTotal(sola, sections, rotor, OP)
+	P = PowerTotal(M, OP.Omega)
+
+	(sol = sola, T=T, M=M, P=P)
+end
+
+# ╔═╡ 39d504bc-7ccd-412a-92da-d27dd4f48198
+begin
+	omegas = 500
+	Vinfty = 10
+	resTot = turbine( omegas, Vinfty; Ncut=104 )
+	resTot.sol.aPrime
+end
+
+# ╔═╡ a374be1c-4630-4530-a055-d13e6228391e
+let sola=resTot.sol
+	p5 = scatter(rs, sola.Qprime,  ms=2, label="Q'")
+	p6 = scatter(rs, sola.alpha *180/pi, ms=1, label="alpha")
+	p7 = scatter(rs, sola.theta *180/pi, ms=1, label="theta")
+	p4 = scatter(rs, sola.phi *180/pi, ms=1, label="phi") 
+	plot(p7,p4,p6, p5,layout=(4,1), size=(750,750))
+end
+
+# ╔═╡ 61452a85-cb0d-4618-bf0f-0099209eb2b4
+resTotS = StructArray(resTot)
+
+# ╔═╡ 6dbf4c10-cf7f-4a8f-bd3c-284b2cc478e4
+let
+	p1 = plot(omegas, resTotS.M, xlabel="Ω [Hz]", ylabel="Torque [Nm]", label=nothing)
+	p2 = plot(omegas, resTotS.T, xlabel="Ω [Hz]", ylabel="Thrust [N]", label=nothing)
+	p3 = plot(omegas, resTotS.P, xlabel="Ω [Hz]", ylabel="Power [W]", label=nothing)
+	plot(p1,p2,p3,layout=(3,1),size=(850,1000))
+	title!("V=$(Vinfty) m/s")
 end
 
 # ╔═╡ a31de0a2-62d9-47a1-ab1a-3087c6d0d166
 # Thrust = ~ 10.9
 # Torque = ~ 2.8
-# Power = ~ 3.4
+# Power = ~ 3.4 
 # with 5 elements, for v=10
 
 # ╔═╡ 5a9031f8-a279-4cb1-83c1-0a431c0c603a
-sola.aPrime |> plot # this could be the main wrong point, a is totally correct
+#sola.aPrime |> plot # this could be the main wrong point, a is totally correct
 
 # ╔═╡ b5f68bab-3be5-4884-9d6c-dca0c6277cc0
-sola.phi*180/pi |> plot# this could be the main wrong point
+#sola.phi*180/pi |> plot# this could be the main wrong point
 
 # ╔═╡ 5a6ceeb4-19d5-4d56-ba9f-53117cd00425
 i = @bind i Slider(1:18, show_value=true)
 
 # ╔═╡ e446c57f-e1e4-4616-a706-85ac14bbcd86
-plot(-pi/2:0.001:pi/2, sola.RFunction[i], ylims=(-5,5))
+#plot(-pi/2:0.001:pi/2, sola.RFunction[i], ylims=(-5,5))
 
 # ╔═╡ Cell order:
 # ╠═d9b8d3ee-1b2b-11ef-3574-1991aad1e852
@@ -365,6 +451,12 @@ plot(-pi/2:0.001:pi/2, sola.RFunction[i], ylims=(-5,5))
 # ╠═bb229950-7eaf-4c4c-aa61-9aee13fc1c09
 # ╠═06546b4a-b706-425e-918a-de0f29a0bc29
 # ╠═ed5d4dd3-af9d-4722-8bc2-54730dd9df48
+# ╠═19e07920-91a6-4150-9104-cd91b9fbd24b
+# ╠═cb0c4980-1203-4328-a4a6-c657816ba785
+# ╠═39d504bc-7ccd-412a-92da-d27dd4f48198
+# ╠═a374be1c-4630-4530-a055-d13e6228391e
+# ╠═61452a85-cb0d-4618-bf0f-0099209eb2b4
+# ╠═6dbf4c10-cf7f-4a8f-bd3c-284b2cc478e4
 # ╠═a31de0a2-62d9-47a1-ab1a-3087c6d0d166
 # ╠═5a9031f8-a279-4cb1-83c1-0a431c0c603a
 # ╠═b5f68bab-3be5-4884-9d6c-dca0c6277cc0
