@@ -15,7 +15,7 @@ This is an approach to solve optimization problem of small wind turbine prelimen
    [ ]- implement numerical integration methods of thrust, torque, and power
    [ ]- implement various dimensionless quantities (such as thrust coefficient, power coefficient, some other crazy long common used metrics found in Durand1935)
    
-   note that only ./1DBEMTMultiSectionValidation2notebook.jl contains the latest correct implementation
+   note that only ./BEMTSingleSectiontest.jl contains the latest correct + almost validated implementation
 
 2. Construct based on real application (geometry, profiles of our small windturbine), try to get close to given performance sheet 
 
