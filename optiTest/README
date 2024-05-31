@@ -12,7 +12,7 @@ This is an approach to solve optimization problem of small wind turbine prelimen
    [ ]- test and validate with other solver (Qblade, CCblade)
    
    additionally:
-   [ ]- implement numerical integration methods of thrust, torque, and power
+   [~X]- implement numerical integration methods of thrust, torque, and power
    [ ]- implement various dimensionless quantities (such as thrust coefficient, power coefficient, some other crazy long common used metrics found in Durand1935)
    
    note that only ./BEMTOptiTestRUN.jl contains the latest correct implementation and optimization
@@ -20,6 +20,7 @@ This is an approach to solve optimization problem of small wind turbine prelimen
 2. Construct based on real application (geometry, profiles of our small windturbine), try to get close to given performance sheet 
 
 3. Formulation of optimization problem as a whole
+   [X]- with Ipopt, formulate the first optimization at single speed, with the usual constraints
 
 4. incooperating basic structure analysis, accustic calculation as constraint 
 
