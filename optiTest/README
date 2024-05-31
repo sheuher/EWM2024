@@ -7,16 +7,15 @@ This is an approach to solve optimization problem of small wind turbine prelimen
    [X]- implement BEMT solver without correction in multi regime
    	- based on NING2020 implement Buhl continuous empirical regime and PB regime
    [ ]- implement loss factor F due to rotational aerodynamic
-   	- Prandtl tip hub loss factor [Prandtl: Aerodynamic theory Springer 1935]
+   	- Prandtl tip hub loss factor
    [ ]- implement Re correction to CL CD 
-   [~X]- test and validate with other solver (Qblade, CCblade)
-   [ ]- a test case is needed, where changes can be tested again reliably
+   [ ]- test and validate with other solver (Qblade, CCblade)
    
    additionally:
    [ ]- implement numerical integration methods of thrust, torque, and power
    [ ]- implement various dimensionless quantities (such as thrust coefficient, power coefficient, some other crazy long common used metrics found in Durand1935)
    
-   note that only ./BEMTSingleSectiontest.jl contains the latest correct + almost validated implementation
+   note that only ./1DBEMTMultiSectionValidation2notebook.jl contains the latest correct implementation
 
 2. Construct based on real application (geometry, profiles of our small windturbine), try to get close to given performance sheet 
 

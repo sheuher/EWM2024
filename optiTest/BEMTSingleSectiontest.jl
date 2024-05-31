@@ -272,6 +272,7 @@ begin
 		Omega = 120/60*2*pi
 		rho = 1.225
 		op = OpCond(Vinf, Omega, rho)
+	op.Omega
 		
 end
 
@@ -312,34 +313,6 @@ begin
 	calc_aPrime(KP)
 end
 
-# ╔═╡ ed5d4dd3-af9d-4722-8bc2-54730dd9df48
-begin
-	Tfull = [0.; sola.Tprime; 0]
-	Qfull = [0.; sola.Qprime; 0]
-	#Tfull[1] = 0
-	#Tfull[end] = 0
-	#Qfull[1] = 0
-	#Qfull[end] = 0
-	rfull = [rotor.Rhub; rs; rotor.Rtip]
-	Thrust = sum(Tfull) * (rfull[3] - rfull[2])#trapz(Tfull, rs)
-	Torque = sum(Qfull) * (rfull[3] - rfull[2])#trapz(Qfull.*rs, rs)
-	Power = Torque * op.Omega
-	
-	println("Thrust = $(Thrust)")
-	println("Torque = $(Torque)")
-	println("Power = $(Power)")
-	#sola.alpha .*180/pi
-	
-	
-	p5 = scatter(rs, sola.Qprime,  ms=2, label="Q'")
-	p6 = scatter(rs, sola.alpha *180/pi, ms=1, label="alpha")
-	p7 = scatter(rs, sola.theta *180/pi, ms=1, label="theta")
-	p4 = scatter(rs, sola.phi *180/pi, ms=1, label="phi") 
-	#plot(p7,p4,p6, p5,layout=(4,1), size=(750,750))
-	1
-	
-end
-
 # ╔═╡ 19e07920-91a6-4150-9104-cd91b9fbd24b
 begin
 	function ThrustTotal(sols, sections, rotor, op)
@@ -361,14 +334,40 @@ begin
 	end
 end
 
+# ╔═╡ ed5d4dd3-af9d-4722-8bc2-54730dd9df48
+begin
+	Tfull = [0.; sola.Tprime; 0]
+	Qfull = [0.; sola.Qprime; 0]
+	
+	rfull = [rotor.Rhub; rs; rotor.Rtip]
+	Thrust = ThrustTotal(sola, sections, rotor, op)#sum(Tfull) * (rfull[3] - rfull[2])
+	Torque = TorqueTotal(sola, sections, rotor, op)#sum(Qfull) * (rfull[3] - rfull[2])
+
+	
+	Power = PowerTotal(Torque, op.Omega)#Torque * op.Omega
+	
+	println("Thrust = $(Thrust)")
+	println("Torque = $(Torque)")
+	println("Power = $(Power)")
+	#sola.alpha .*180/pi
+	
+	
+	p5 = scatter(rs, sola.Qprime,  ms=2, label="Q'")
+	p6 = scatter(rs, sola.alpha *180/pi, ms=1, label="alpha")
+	p7 = scatter(rs, sola.theta *180/pi, ms=1, label="theta")
+	p4 = scatter(rs, sola.phi *180/pi, ms=1, label="phi") 
+	plot(p7,p4,p6, p5,layout=(4,1), size=(750,750))
+
+end
+
 # ╔═╡ cb0c4980-1203-4328-a4a6-c657816ba785
-function turbine(Ω, Vinf; Ncut=102)
+function turbine(Ω, V; Ncut=102)
 	Rtip = 0.55
 	Rhub = 0.135
 	N = 3
 	rotor = Rotor(Rtip,Rhub,N)
 	
-	Vinf = 10
+	Vinf = V
 	Omega = Ω/60*2*pi
 	rho = 1.225
 	OP = OpCond(Vinf, Omega, rho)
@@ -394,16 +393,52 @@ function turbine(Ω, Vinf; Ncut=102)
 	(sol = sola, T=T, M=M, P=P)
 end
 
+# ╔═╡ 2ea86e2b-63fd-4c9c-926c-3fd30a5674ba
+turbineZero(omega, v) = turbine(omega, v; Ncut=34).M - 3.7 
+
+# ╔═╡ 15a51040-b278-4f18-aa76-f01bbd11eba4
+vvv = @bind vvv Slider(1.:0.2:18., show_value=true)
+
+# ╔═╡ 9eeeaab2-33c7-4339-b179-f079ab144574
+plot(0:20:1500, turbineZero.(0:20:1500, vvv))
+
+# ╔═╡ a004b484-a861-45ef-9d93-d60db9150478
+# solve for M(omega) - 3.7 = 0
+nlsolve((omega) -> turbineZero(omega[1], 11), [250.]).zero
+
+# ╔═╡ 67edacb0-528c-4066-a2e0-6a88a17cee7d
+let
+	OME=let
+	Vinfs = 8.6:0.5:18
+	map(Vinfs) do Vinf
+		nlsolve((omega) -> turbineZero(omega[1], Vinf), [1000.]).zero[1]
+	end
+end
+
+#surface(12:500, 3:15, turbineZero)
+
+po=[turbine(OME[i], (8.6:0.5:18)[i]; Ncut=34).T for i in 1:length(OME)]
+
+let
+p1=plot(8.6:0.5:18, po, xlabel="Vinf", ylabel="Power")
+p2=plot(8.6:0.5:18, OME, xlabel="Vinf", ylabel="Omega")
+plot(p1,p2,layout=(2,1), size=(1000,1000), legend=nothing)
+end
+
+end
+
+# ╔═╡ e131f2aa-510c-4d2e-b709-cca96fcab395
+sqrt((258/60*2pi * 0.55)^2 + (10)^2) # W ≈ 17.91
+
 # ╔═╡ 39d504bc-7ccd-412a-92da-d27dd4f48198
 begin
-	omegas = 500
+	omegas = 12:500
 	Vinfty = 10
-	resTot = turbine( omegas, Vinfty; Ncut=104 )
-	resTot.sol.aPrime
+	resTot = turbine.( omegas, Vinfty; Ncut=104 )
 end
 
 # ╔═╡ a374be1c-4630-4530-a055-d13e6228391e
-let sola=resTot.sol
+let sola=resTot[1].sol
 	p5 = scatter(rs, sola.Qprime,  ms=2, label="Q'")
 	p6 = scatter(rs, sola.alpha *180/pi, ms=1, label="alpha")
 	p7 = scatter(rs, sola.theta *180/pi, ms=1, label="theta")
@@ -411,15 +446,24 @@ let sola=resTot.sol
 	plot(p7,p4,p6, p5,layout=(4,1), size=(750,750))
 end
 
+# ╔═╡ bf8e65aa-f629-4be7-9948-4ccf56050a88
+
+
+# ╔═╡ 0670a6e0-ae8f-4b82-a9b6-c655e8b5d7f8
+
+
 # ╔═╡ 61452a85-cb0d-4618-bf0f-0099209eb2b4
 resTotS = StructArray(resTot)
 
 # ╔═╡ 6dbf4c10-cf7f-4a8f-bd3c-284b2cc478e4
 let
-	p1 = plot(omegas, resTotS.M, xlabel="Ω [Hz]", ylabel="Torque [Nm]", label=nothing)
-	p2 = plot(omegas, resTotS.T, xlabel="Ω [Hz]", ylabel="Thrust [N]", label=nothing)
-	p3 = plot(omegas, resTotS.P, xlabel="Ω [Hz]", ylabel="Power [W]", label=nothing)
-	plot(p1,p2,p3,layout=(3,1),size=(850,1000))
+	p1 = plot(omegas, resTotS.M, xticks=0:20:500, yticks=minimum(resTotS.M):0.2:maximum(resTotS.M)+5, 
+	xlabel="Ω [Hz]", ylabel="Torque [Nm]", label=nothing)
+	p2 = plot(omegas, resTotS.T, xticks=0:20:500, yticks=minimum(resTotS.T):2:maximum(resTotS.T)+5,
+		xlabel="Ω [Hz]", ylabel="Thrust [N]", label=nothing)
+	p3 = plot(omegas, resTotS.P, xticks=0:20:500, yticks=minimum(resTotS.P):20:maximum(resTotS.P)+20,
+		xlabel="Ω [Hz]", ylabel="Power [W]", label=nothing)
+	plot(p1,p2,p3,layout=(3,1),size=(1000,1000))
 	title!("V=$(Vinfty) m/s")
 end
 
@@ -453,12 +497,20 @@ i = @bind i Slider(1:18, show_value=true)
 # ╠═ed5d4dd3-af9d-4722-8bc2-54730dd9df48
 # ╠═19e07920-91a6-4150-9104-cd91b9fbd24b
 # ╠═cb0c4980-1203-4328-a4a6-c657816ba785
+# ╠═2ea86e2b-63fd-4c9c-926c-3fd30a5674ba
+# ╠═15a51040-b278-4f18-aa76-f01bbd11eba4
+# ╠═9eeeaab2-33c7-4339-b179-f079ab144574
+# ╠═a004b484-a861-45ef-9d93-d60db9150478
+# ╠═67edacb0-528c-4066-a2e0-6a88a17cee7d
+# ╟─e131f2aa-510c-4d2e-b709-cca96fcab395
 # ╠═39d504bc-7ccd-412a-92da-d27dd4f48198
 # ╠═a374be1c-4630-4530-a055-d13e6228391e
+# ╠═bf8e65aa-f629-4be7-9948-4ccf56050a88
+# ╠═0670a6e0-ae8f-4b82-a9b6-c655e8b5d7f8
 # ╠═61452a85-cb0d-4618-bf0f-0099209eb2b4
 # ╠═6dbf4c10-cf7f-4a8f-bd3c-284b2cc478e4
 # ╠═a31de0a2-62d9-47a1-ab1a-3087c6d0d166
 # ╠═5a9031f8-a279-4cb1-83c1-0a431c0c603a
 # ╠═b5f68bab-3be5-4884-9d6c-dca0c6277cc0
-# ╟─5a6ceeb4-19d5-4d56-ba9f-53117cd00425
+# ╠═5a6ceeb4-19d5-4d56-ba9f-53117cd00425
 # ╠═e446c57f-e1e4-4616-a706-85ac14bbcd86

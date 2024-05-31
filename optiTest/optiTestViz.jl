@@ -1,7 +1,9 @@
 import Pkg; Pkg.activate(".")
 
 using Plots
+using DelimitedFiles
 
+OptiRes = readdlm("BEMTOptiTestRUN.dat")
 airfoilCoords = [
     1.000000   .000000
     .998105   .000656
@@ -84,31 +86,20 @@ airfoilCoords = [
     .992088   .001700
     .998026   .000453
     .999999   .000000]
+begin    
+    n = 20
+    x = OptiRes
+    rs = x[1:n]
+    chords = x[n+1:2*n]
+    thetas = x[2*n+1:3*n]
 
-propgeom = [
-    0.15   0.130   32.76
-    0.20   0.149   37.19
-    0.25   0.173   33.54
-    0.30   0.189   29.25
-    0.35   0.197   25.64
-    0.40   0.201   22.54
-    0.45   0.200   20.27
-    0.50   0.194   18.46
-    0.55   0.186   17.05
-    0.60   0.174   15.97
-    0.65   0.160   14.87
-    0.70   0.145   14.09
-    0.75   0.128   13.39
-    0.80   0.112   12.84
-    0.85   0.096   12.25
-    0.90   0.081   11.37
-    0.95   0.061   10.19
-    1.00   0.041   8.99
-    ]
-    
-rs = propgeom[:, 1] * Rtip
-chords = propgeom[:, 2] * Rtip
-thetas = propgeom[:, 3] * -pi/180
+    Rhub = x[3*n+1]
+    Rtip = x[3*n+2]
+
+    Vinf = x[3*n+3]
+    Omega = x[3*n+4]
+    rho = x[3*n+5]
+end
 
 rotMat(θ) = [cos(θ) -sin(θ); sin(θ) cos(θ)]
 
@@ -153,100 +144,43 @@ p
 end
 
 let
-    
+    plotly()
     modAirfoilCoords = structAirfoilCoords(airfoilCoords, thetas, chords, rs)
 
-    p=plot(size=(1000,1000))
-    [plot!(p, modAirfoilCoords[i,:,1], modAirfoilCoords[i,:,2], modAirfoilCoords[i,:,3], aspect_ratio=:equal, c=:green, label=nothing, grid=nothing, axis=nothing, xlabel="x", ylabel="y") for i in 1:18]
+    p=plot(size=(1000,1000), aspect_ratio=:equal)
+    [plot!(p, modAirfoilCoords[i,:,1], modAirfoilCoords[i,:,2], modAirfoilCoords[i,:,3], aspect_ratio=:equal, c=:green, label=nothing, xlabel="x", ylabel="y") for i in 1:18]
     #plot!(p, modAirfoilCoords[1,:,1], modAirfoilCoords[1,:,3])
     p
 end
 
 rot3Dyaxis(θ) = [cos(θ) 0 sin(θ);0 1 0; -sin(θ) 0 cos(θ)]
-
+plotly()
 let
-    propgeom = [
-    0.15   0.130   32.76
-    0.20   0.149   37.19
-    0.25   0.173   33.54
-    0.30   0.189   29.25
-    0.35   0.197   25.64
-    0.40   0.201   22.54
-    0.45   0.200   20.27
-    0.50   0.194   18.46
-    0.55   0.186   17.05
-    0.60   0.174   15.97
-    0.65   0.160   14.87
-    0.70   0.145   14.09
-    0.75   0.128   13.39
-    0.80   0.112   12.84
-    0.85   0.096   12.25
-    0.90   0.081   11.37
-    0.95   0.061   10.19
-    1.00   0.041   8.99
-    ]
-    
-    rs = propgeom[:, 1] * Rtip
-    chords = propgeom[:, 2] * Rtip
-    thetas = propgeom[:, 3] * -pi/180
     
     modAirfoilCoords = structAirfoilCoords(airfoilCoords, thetas, chords, rs)
 	
     modAirfoilCoords1 = similar(modAirfoilCoords)
     modAirfoilCoords2 = similar(modAirfoilCoords); modAirfoilCoords3 = similar(modAirfoilCoords)
 
-    ztheta = 2pi/2
+    ztheta = 2pi/3
 
     [modAirfoilCoords1[i,:,:] = modAirfoilCoords[i,:,:] *rot3Dyaxis(ztheta) for i in 1:length(rs)]
     [modAirfoilCoords2[i,:,:] = modAirfoilCoords[i,:,:] *rot3Dyaxis(2 *ztheta) for i in 1:length(rs)]
-    #[modAirfoilCoords3[i,:,:] = modAirfoilCoords[i,:,:] *rot3Dyaxis(3 *ztheta) for i in 1:length(rs)]
+    [modAirfoilCoords3[i,:,:] = modAirfoilCoords[i,:,:] *rot3Dyaxis(3 *ztheta) for i in 1:length(rs)]
 
 
-    p=plot(size=(1000,1000), xlims=(-0.15,0.15), ylims=(-0.15,0.15), zlims=(-0.15,0.15))
+    p=plot(size=(1000,1000))
     
     # [plot!(p, modAirfoilCoords1[i,:,1], modAirfoilCoords1[i,:,2], modAirfoilCoords1[i,:,3], aspect_ratio=:equal, c=:green, label=nothing, grid=nothing, axis=nothing, xlabel="x", ylabel="y") for i in 1:length(rs)]
     # [plot!(p, modAirfoilCoords2[i,:,1], modAirfoilCoords2[i,:,2], modAirfoilCoords2[i,:,3], aspect_ratio=:equal, c=:green, label=nothing, grid=nothing, axis=nothing, xlabel="x", ylabel="y") for i in 1:length(rs)]
     # [plot!(p, modAirfoilCoords3[i,:,1], modAirfoilCoords3[i,:,2], modAirfoilCoords3[i,:,3], aspect_ratio=:equal, c=:green, label=nothing, grid=nothing, axis=nothing, xlabel="x", ylabel="y") for i in 1:length(rs)]
     [plot!(p, modAirfoilCoords1[i,:,1], modAirfoilCoords1[i,:,2], modAirfoilCoords1[i,:,3], aspect_ratio=:equal, c=:green, label=nothing, xlabel="x", ylabel="y") for i in 1:length(rs)]
     [plot!(p, modAirfoilCoords2[i,:,1], modAirfoilCoords2[i,:,2], modAirfoilCoords2[i,:,3], aspect_ratio=:equal, c=:green, label=nothing, xlabel="x", ylabel="y") for i in 1:length(rs)]
-    #[plot!(p, modAirfoilCoords3[i,:,1], modAirfoilCoords3[i,:,2], modAirfoilCoords3[i,:,3], aspect_ratio=:equal, c=:green, label=nothing, xlabel="x", ylabel="y") for i in 1:length(rs)]
-    savefig(p, "propeller0.html")
+    [plot!(p, modAirfoilCoords3[i,:,1], modAirfoilCoords3[i,:,2], modAirfoilCoords3[i,:,3], aspect_ratio=:equal, c=:green, label=nothing, xlabel="x", ylabel="y") for i in 1:length(rs)]
+    #savefig(p, "propeller0.html")
+    p
 end
 
-
-\let
-    propgeom = [
-    0.15   0.130   32.76
-    0.20   0.149   37.19
-    0.25   0.173   33.54
-    0.30   0.189   29.25
-    0.35   0.197   25.64
-    0.40   0.201   22.54
-    0.45   0.200   20.27
-    0.50   0.194   18.46
-    0.55   0.186   17.05
-    0.60   0.174   15.97
-    0.65   0.160   14.87
-    0.70   0.145   14.09
-    0.75   0.128   13.39
-    0.80   0.112   12.84
-    0.85   0.096   12.25
-    0.90   0.081   11.37
-    0.95   0.061   10.19
-    1.00   0.041   8.99
-    ]
-    
-    rs = propgeom[:, 1] * Rtip
-    chords = propgeom[:, 2] * Rtip
-    thetas = propgeom[:, 3] * -pi/180
-    
-    modAirfoilCoords = structAirfoilCoords(airfoilCoords, thetas, chords, rs)
-
-    ztheta = 2pi/3
-    modAirfoilCoords1 = modAirfoilCoords
-
-    XX = [ modAirfoilCoords1[i,:,1] * ones( length(modAirfoilCoords1[i,:,1]) )' for i in 1:length(rs) ]
-    YY = [ ones( length(modAirfoilCoords1[i,:,1]) ) * modAirfoilCoords1[i,:,1]' for i in 1:length(rs) ]
-    [meshscatter(modAirfoilCoords1[i,:,1], modAirfoilCoords1[i,:,2], modAirfoilCoords1[i,:,3]) for i in 1:length(rs)]
-    current_figure()
-end
+plot(thetas*180/pi)
+plot(chords)
+Omega

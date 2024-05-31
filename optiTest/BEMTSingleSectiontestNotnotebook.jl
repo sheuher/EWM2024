@@ -1,34 +1,14 @@
-### A Pluto.jl notebook ###
-# v0.19.42
-
-using Markdown
-using InteractiveUtils
-
-# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
-macro bind(def, element)
-    quote
-        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
-        local el = $(esc(element))
-        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
-        el
-    end
-end
-
-# ╔═╡ d9b8d3ee-1b2b-11ef-3574-1991aad1e852
 begin
 	import Pkg; Pkg.activate(".")
 	
-	using PlutoUI
-	using Interpolations, NLsolve
+	using Interpolations
 	using StructArrays
 	using Plots
 	using DelimitedFiles
-	using NonlinearSolve, Roots
+	using NonlinearSolve, Roots, NLsolve
 end
 
-# ╔═╡ ecdc3a49-fc13-4f23-b145-edb406629a18
 begin
-	
 	struct AirfoilData
 	    alphas :: AbstractVector
 	    CLs :: AbstractVector
@@ -147,8 +127,8 @@ begin
 	end
 	
 	calc_W(Uinf, Ω, r, a, a′) = sqrt(Uinf^2 *(1 -a)^2 + (Ω*r*(1 +a′))^2)
-	calc_T(N, Cn, ρ, W, c, r) = N*Cn*0.5*ρ*W^2*c*r
-	calc_Q(N, Ct, ρ, W, c, r) = N*Ct*0.5*ρ*W^2*c*r^2
+	calc_T(N, Cn, ρ, W, c, r) = N*Cn*0.5*ρ*W^2*c # N direction
+	calc_Q(N, Ct, ρ, W, c, r) = N*Ct*0.5*ρ*W^2*c*r # T direction
 
 	function calc_F()
 	end
@@ -209,11 +189,6 @@ begin
 		# return Residual
 		return sin(ϕ)/(κ -1) - Uinf*cos(ϕ)*(1 -κ′) /(Ω*r) 
 	end
-	
-	function solve_R(Rfunc::Function)
-		# using Roots's Brent-Dekker method
-		fzero(Rfunc, (-pi/2, -1e-6), Roots.Brent())
-	end
 
 	function solve_R(Rfunc::Function, lb, ub)
 		# using Roots's Brent-Dekker method
@@ -224,21 +199,21 @@ begin
 		if Rfunc(-π/2) > 0
 			return solve_R(Rfunc,-π/2,ϵ)
 		elseif (RPBfunc(-π/4) < 0) && (RPBfunc(ϵ) > 0)
+			println(4)
 			return solve_R(RPBfunc,-π/4,-ϵ)
 		else
+			println(5)
 			return solve_R(Rfunc,π/2,π)
 		end
 	end
-	
 end
 
-# ╔═╡ 67cb8ae8-4d67-497f-ac9a-ad316336ca8e
 begin
 	airfoil = readdlm("SG6043_360_Polar_NREL_Format.txt")
 	airfoildata = AirfoilData(airfoil[:,1]*pi/180, airfoil[:,2], airfoil[:,3])
 end
 
-# ╔═╡ ef399a25-87b2-457c-83c3-7cb757ed74f8
+
 begin
 	interptest = interpCLCDstruct(airfoildata)
 	p1 = scatter(-2pi:0.01:2pi, d->interptest[1](d), size=(1000,500), ms=1)
@@ -247,97 +222,114 @@ begin
 	plot(p1,p2,layout=(2,1))
 end
 
-# ╔═╡ b38ebafd-c6e2-4e18-8d63-8b943d7d439b
-Vinf = @bind Vinf Slider(1:35, show_value=true)
 
-# ╔═╡ bef3ad20-9a9f-4cf2-bf3a-5ffa1b8dc785
+
+
 begin
-		
-	#################################################
-	#################rotor & op######################
-		
-		Rtip = 0.55
-		Rhub = 0.1*Rtip
-		N = 3
-		rotor = Rotor(Rtip,Rhub,N)
-		
-		#Vinf = 5.0
-		Omega = 12*60*pi/30
-		rho = 1.225
-		op = OpCond(Vinf, Omega, rho)
-		
+	function ThrustTotal(sols, sections, rotor, op)
+		# numerical integration for thrust for linearly spaced radial section
+		rs = [section.r for section in sections]
+		Tfull = [0.; sols.Tprime; 0]
+		rfull = [rotor.Rhub; rs; rotor.Rtip]
+		sum(Tfull) * (rfull[3] - rfull[2])
+	end
+	function TorqueTotal(sols, sections, rotor, op)
+		# numerical integration for thrust for linearly spaced radial section
+		rs = [section.r for section in sections]
+		Qfull = [0.; sols.Qprime; 0]
+		rfull = [rotor.Rhub; rs; rotor.Rtip]
+		sum(Qfull) * (rfull[3] - rfull[2])
+	end
+	function PowerTotal(Torque, Omega)
+		Torque *Omega
+	end
 end
 
-# ╔═╡ bb229950-7eaf-4c4c-aa61-9aee13fc1c09
-begin
-	#################################################
-	#####################test2#######################
+function turbine(Ω, Vinf; Ncut=102)
+	Rtip = 0.55
+	Rhub = 0.135
+	N = 3
+	rotor = Rotor(Rtip,Rhub,N)
 	
-	
-	#   r/R, c/R, theta[degree]
+	Vinf = Vinf
+	Omega = Ω/60*2*pi
+	rho = 1.225
+	OP = OpCond(Vinf, Omega, rho)
 	propgeom = [
-	    0.15   0.130   32.76
-	    0.20   0.149   37.19
-	    0.25   0.173   33.54
-	    0.30   0.189   29.25
-	    0.35   0.197   25.64
-	    0.40   0.201   22.54
-	    0.45   0.200   20.27
-	    0.50   0.194   18.46
-	    0.55   0.186   17.05
-	    0.60   0.174   15.97
-	    0.65   0.160   14.87
-	    0.70   0.145   14.09
-	    0.75   0.128   13.39
-	    0.80   0.112   12.84
-	    0.85   0.096   12.25
-	    0.90   0.081   11.37
-	    0.95   0.061   10.19
-	    1.00   0.041   8.99
+	    0.135/0.55   0.20   -30
+	    1.00   0.15   -9
 	    ]
 	
-	rs = propgeom[:,1] *Rtip
-	chords = propgeom[:,2] *Rtip
-	thetas = - propgeom[:,3] *pi/180
-	
+	rs = LinRange( propgeom[1,1], propgeom[2,1], Ncut )[2:end-1] *Rtip
+	chords = LinRange( propgeom[1,2], propgeom[2,2], Ncut )[2:end-1] *Rtip
+	thetas = LinRange( propgeom[1,3], propgeom[2,3], Ncut )[2:end-1] *pi/180
+
 	sections = Section.(rs,chords,thetas,Ref(airfoildata),Ref(rotor))
 	
-	sol = Solve.(Ref(rotor), sections, Ref(op))
+	sol = Solve.(Ref(rotor), sections, Ref(OP))
 	
 	sola = StructArray(sol)
-	
-	#sola.alpha[1] *180/pi
-	#sola.Tprime[1] 
-	#sola.Qprime[1]
-	#sola.W[1]
-	
-	println("Thrust = $(sum(sola.Tprime) *(rs[2]-rs[1]))")
-	println("Torque = $(sum(sola.Qprime) *(rs[2]-rs[1]))")
-	println("Power = $(sum(sola.Qprime) *(rs[2]-rs[1]) *op.Omega)")
-	#sola.alpha .*180/pi
-	
-	
-	p5 = scatter(propgeom[:,1], sola.Qprime,  ms=2, label="Q'")
+
+	T = ThrustTotal(sola, sections, rotor, OP)
+	M = TorqueTotal(sola, sections, rotor, OP)
+	P = PowerTotal(M, OP.Omega)
+
+	(sol = sola, T=T, M=M, P=P)
+end
+
+turbineZero(omega, v) = turbine(omega, v; Ncut=34).M - 3.7 
+
+# solve for M(omega) - 3.7 = 0
+nlsolve((omega) -> turbineZero(omega[1], 5), [250.]).zero
+
+OME=let
+	Vinfs = 8.6:0.5:18
+	map(Vinfs) do Vinf
+		nlsolve((omega) -> turbineZero(omega[1], Vinf), [1000.]).zero[1]
+	end
+end
+
+#surface(12:500, 3:15, turbineZero)
+
+po=[turbine(OME[i], (8.6:0.5:18)[i]; Ncut=34).T for i in 1:length(OME)]
+
+let
+p1=plot(8.6:0.5:18, po, xlabel="Vinf", ylabel="Power")
+p2=plot(8.6:0.5:18, OME, xlabel="Vinf", ylabel="Omega")
+plot(p1,p2,layout=(2,1), size=(1000,1000), legend=nothing)
+end
+
+
+begin
+	omegas = 12:500
+	Vinfty = 10
+	resTot = turbine.( omegas, Vinfty; Ncut=104 )
+end
+
+let sola=resTot[1].sol
+	p5 = scatter(rs, sola.Qprime,  ms=2, label="Q'")
 	p6 = scatter(rs, sola.alpha *180/pi, ms=1, label="alpha")
 	p7 = scatter(rs, sola.theta *180/pi, ms=1, label="theta")
 	p4 = scatter(rs, sola.phi *180/pi, ms=1, label="phi") 
 	plot(p7,p4,p6, p5,layout=(4,1), size=(750,750))
-
 end
 
-# ╔═╡ 5a6ceeb4-19d5-4d56-ba9f-53117cd00425
-i = @bind i Slider(1:18, show_value=true)
 
-# ╔═╡ e446c57f-e1e4-4616-a706-85ac14bbcd86
-plot(-pi/2:0.001:pi/2, sola.RFunction[i], ylims=(-5,5))
 
-# ╔═╡ Cell order:
-# ╠═d9b8d3ee-1b2b-11ef-3574-1991aad1e852
-# ╠═ecdc3a49-fc13-4f23-b145-edb406629a18
-# ╠═67cb8ae8-4d67-497f-ac9a-ad316336ca8e
-# ╠═ef399a25-87b2-457c-83c3-7cb757ed74f8
-# ╠═bef3ad20-9a9f-4cf2-bf3a-5ffa1b8dc785
-# ╠═b38ebafd-c6e2-4e18-8d63-8b943d7d439b
-# ╟─bb229950-7eaf-4c4c-aa61-9aee13fc1c09
-# ╠═5a6ceeb4-19d5-4d56-ba9f-53117cd00425
-# ╠═e446c57f-e1e4-4616-a706-85ac14bbcd86
+resTotS = StructArray(resTot)
+
+let
+	p1 = plot(omegas, resTotS.M, xticks=0:20:500, yticks=minimum(resTotS.M):0.2:maximum(resTotS.M)+5, 
+	xlabel="Ω [Hz]", ylabel="Torque [Nm]", label=nothing)
+	p2 = plot(omegas, resTotS.T, xticks=0:20:500, yticks=minimum(resTotS.T):2:maximum(resTotS.T)+5,
+		xlabel="Ω [Hz]", ylabel="Thrust [N]", label=nothing)
+	p3 = plot(omegas, resTotS.P, xticks=0:20:500, yticks=minimum(resTotS.P):20:maximum(resTotS.P)+20,
+		xlabel="Ω [Hz]", ylabel="Power [W]", label=nothing)
+	plot(p1,p2,p3,layout=(3,1),size=(1000,1000))
+	title!("V=$(Vinfty) m/s")
+end
+
+# Thrust = ~ 10.9
+# Torque = ~ 2.8
+# Power = ~ 3.4 
+# with 5 elements, for v=10
