@@ -21,6 +21,7 @@ This is an approach to solve optimization problem of small wind turbine prelimen
 
 3. Formulation of optimization problem as a whole
    [X]- with Ipopt, formulate the first optimization at single speed, with the usual constraints
+      - https://coin-or.github.io/Ipopt/INTERFACES.html
 
 4. incooperating basic structure analysis, accustic calculation as constraint 
 
