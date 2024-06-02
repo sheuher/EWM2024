@@ -373,8 +373,8 @@ begin
 	Rhub = 0.135
 	N = 3
 	Vinf = 10.
-	Ncut = 100
-	Omega = 250/60*2*pi
+	Ncut = 20
+	Omega = 50/60*2*pi
 	rho = 1.225
 	propgeom = [0.135/0.55   0.20   -30
 				1.00         0.15   -9]
@@ -467,7 +467,7 @@ end
 	count(x->x==0, vec(hes)) = 178262
 """
 
-nzJ = 610# - 4
+nzJ = 610
 nzH = 7788
 n = 305
 m = 2
@@ -475,20 +475,23 @@ m = 2
 begin
 
 	r = LinRange( Rhub/Rtip, 1., Ncut+2 )[2:end-1] *Rtip
-	chord_L = zeros(Ncut)
+	chord_L = 0.05 *ones(Ncut) *Rtip
 	chord_U = 0.3 *ones(Ncut) *Rtip
-	theta_L = -pi/2 *ones(Ncut)
-	theta_U = zeros(Ncut)
+	theta_L = -pi/6 *ones(Ncut)
+	theta_U = -5 *ones(Ncut)
 
-	Omega_L = 0.01
+	Omega_L = 1.
 	Omega_U = 1220.
 
 	x_L = [r; chord_L; theta_L; Rhub; Rtip; Vinf; Omega_L; rho]
 	x_U = [r; chord_U; theta_U; Rhub; Rtip; Vinf; Omega_U; rho]
 	
 end
-g_L = [3.27-0.11; -Inf]
-g_U = [3.27+0.11; 25]
+#g_L = [3.27-0.11; -Inf]
+#g_U = [3.27+0.11; 25]
+
+g_L = [1.; 0.01]
+g_U = [3.; 15]
 
 prob = Ipopt.CreateIpoptProblem(
     n,

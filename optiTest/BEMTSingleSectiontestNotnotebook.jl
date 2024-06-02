@@ -332,4 +332,4 @@ end
 # Thrust = ~ 10.9
 # Torque = ~ 2.8
 # Power = ~ 3.4 
-# with 5 elements, for v=10
+# with 5 elements, for v=10, Omega=12

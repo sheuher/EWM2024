@@ -9,6 +9,7 @@ begin
     using Ipopt
     using ForwardDiff
 	using FLOWMath#:brent
+    using Distributions
 end
 
 begin
@@ -299,17 +300,86 @@ begin
 
 	#ForwardDiff.jacobian(BEMTwrapper, x)
 end 
+function initTurbOptiMulti(nV)
 
+    airfoil = readdlm("SG6043_360_Polar_NREL_Format.dat", skipstart=3)
+	airfoildata = AirfoilData(airfoil[:,1], airfoil[:,2], airfoil[:,3])
+
+	Rtip = 0.55
+	Rhub = 0.135
+	N = 3
+	Ncut = 20
+	Omega = 125.0/60*2*pi
+    OmegaMax = 1220.0/60*2*pi
+	rho = 1.225
+	propgeom = [0.135/0.55   0.20   -30
+				1.00         0.15   -9]
+
+	r = LinRange( Rhub/Rtip, 1., Ncut+2 )[2:end-1] *Rtip
+	chord = LinRange( propgeom[1,2], propgeom[2,2], Ncut+2 )[2:end-1] *Rtip
+	theta = LinRange( propgeom[1,3], propgeom[2,3], Ncut+2 )[2:end-1] *pi/180
+    
+    Vstart = 3.5
+    Vend = 12.
+    Vinf = LinRange(Vstart, Vend, nV)
+    tsr = 2.5
+
+	x = [r; chord; theta; Rhub; Rtip; Vinf; tsr; rho]
+	y = zeros(2*nV)
+
+    function BEMTMultiwrapper(x)
+
+        n = 20
+        r = x[1:n]
+		chord = x[n+1:2*n]
+		theta = x[2*n+1:3*n]
+
+		Rhub = x[3*n+1]
+		Rtip = x[3*n+2]
+
+		Vinf = x[3*n+3:3*n+3+nV-1]
+		tsr = x[3*n+3+nV]
+		rho = x[3*n+3+nV+1]
+
+        Omega = min.(collect(Vinf).*tsr/Rtip, OmegaMax)
+
+        rotor = Rotor(Rtip, Rhub, N)
+		sections = Section.(r, chord, theta, interpCLCDstruct(airfoildata)..., (r)->1, N*chord ./(2*pi*r))
+		op = OpCond.(Vinf', Omega', Ref(rho))
+
+        res = [StructArray( Solve.(Ref(rotor), sections, Ref(op[i])) ) for i in 1:10]
+        T = ThrustTotal.(res, Ref(sections), Ref(rotor), nothing)
+        Q = TorqueTotal.(res, Ref(sections), Ref(rotor), nothing)
+        
+        return [T; Q]
+    end
+
+    return x,y,BEMTMultiwrapper
+end
+
+x,y,BEMTMultiwraper= initTurbOptiMulti(10)
 
 function eval_f(x)
-	n = Ncut
-	return - BEMTwrapper(x)[2] * x[3*n+4]
+	n = 20
+    nV = 10
+    res = BEMTMultiwraper(x)
+    Torque = res[nV+1:2*nV]
+    Vinf = x[3*n+3:3*n+3+nV-1]
+    tsr = x[3*n+3+nV]
+	Rtip = x[3*n+2]
+    Omega = min.(collect(Vinf).*tsr/Rtip, 1220)
+    Power = Torque .* Omega
+    weightedVinf = pdf.(Weibull(1.3578067375272458, 7.70453695223708), Vinf) .*Vinf
+	return - sum(Power .* weightedVinf) /nV
 end
 
 function eval_g(x, g)
-	T,Q = BEMTwrapper(x)
-	g[1] = Q
-	return g[2] = T
+    nV = 10
+    res = BEMTMultiwraper(x)
+	for i in 1:2nV
+        g[i] = res[i] # thrust then torque
+    end
+    return nothing
 end
 
 function eval_grad_f(x, grad_f)
@@ -322,55 +392,61 @@ function eval_jac_g(
     cols,
     values
 )
-
+    n = 20
+    nV = 10
+    id = 1
     if values === nothing
-        # m = 2
-        # n = 305
-        id = 1
-        for m in 1:2
-            for n in 1:3*Ncut +5
+        for m in 1:2*nV
+            for n in 1:n*3 + 4 + nV
                 rows[id] = n
                 cols[id] = m
                 id += 1
             end
         end
     else
-        jac = zeros(2,3*Ncut +5)
-        ForwardDiff.jacobian!(jac, (y,x)->eval_g(x,y), zeros(2), x)
+        jac = zeros(2*nV, n*3 + 4 + nV)
+        ForwardDiff.jacobian!(jac, (y,x)->eval_g(x,y), zeros(2*nV), x)
         values .= vec( jac ) 
     end
     return nothing
 end
 
-# jac = zeros(2*65)
-# rows = zeros(2*65)
-# cols = zeros(2*65)
+# jac = zeros(20*74)
+# rows = zeros(20*74)
+# cols = zeros(20*74)
 # eval_jac_g(x, rows, cols, jac)
 # jac
 # hes = ForwardDiff.jacobian(x -> ForwardDiff.jacobian((x)->begin
-# 	T,Q = BEMTwrapper(x)
-# 	[Q; T]
-# 	end, x), x)
+	# r = BEMTMultiwraper(x)
+	# r
+	# end, x), x)
+# count(x->x!==0, hes)
 
-nzJ = 2 *(Ncut*3 +5) #- 4
-nzH = 2 *(Ncut*3 +5)^2 - 6902 #130*65 - 6902
-n = 3*Ncut +5
-m = 2
+nzJ = 20*74
+nzH = 109520
+n = 20*74
+m = 20
 #x = [r; chord; theta; Rhub; Rtip; Vinf; Omega; rho]
 
 begin
-
+    n = 20
+    nV = 10
+	Rtip = x[3*n+2]
+	Rhub = x[3*n+1]
+    r = x[1:n]
 	#r = LinRange( Rhub/Rtip, 1., Ncut+2 )[2:end-1] *Rtip
-	chord_L = 0.05 *ones(Ncut)
-	chord_U = 0.35 *ones(Ncut) *Rtip
-	theta_L = -pi/6 *ones(Ncut)
-	theta_U = -5*pi/180 *ones(Ncut)
+	chord_L = 0.05 *ones(n) *Rtip
+	chord_U = 0.35 *ones(n) *Rtip
+	theta_L = -pi/6 *ones(n)
+	theta_U = -5*pi/180 *ones(n)
 
-	Omega_L = 12.
-	Omega_U = 1220.
+	tsr_L = 1.
+	tsr_U = 12.
 
-	x_L = [r; chord_L; theta_L; Rhub; Rtip; Vinf; Omega_L; rho]
-	x_U = [r; chord_U; theta_U; Rhub; Rtip; Vinf; Omega_U; rho]
+    Vinf = x[3*n+3:3*n+3+nV-1]
+
+	x_L = [r; chord_L; theta_L; Rhub; Rtip; Vinf; tsr_L; 1.225]
+	x_U = [r; chord_U; theta_U; Rhub; Rtip; Vinf; tsr_U; 1.225]
 	
 end
 
@@ -402,15 +478,22 @@ end
 
 #g_L = [3.27-0.11; -Inf]
 #g_U = [3.27+0.11; 35]
-
-g_L = [1.27; 0.01]
-g_U = [5.27; 35]
+begin
+    Thrust_L = 0.1 *ones(nV) 
+    Thrust_U = 50 *ones(nV) 
+    Torque_L = ones(nV) 
+    Torque_U = 20 *ones(nV) 
+    g_L = [Thrust_L; Torque_L]
+    g_U = [Thrust_U; Torque_U]
+end
+#g_L = [1.27; 0.01]
+#g_U = [5.27; 35]
 
 prob = Ipopt.CreateIpoptProblem(
-    n,
+    74,
     x_L,
     x_U,
-    m,
+    20,
     g_L,
     g_U,
     nzJ,
@@ -470,54 +553,57 @@ function CCbladewrapper(x)
 	return [T; Q]
 end
 
-
+gr()
 println("CCBlade")
 println(CCbladewrapper(res))
 
+
+    TQ = BEMTMultiwraper(res)    
+    Vinf = x[3*n+3:3*n+3+nV-1]
+    tsr = x[3*n+3+nV]
+    Rtip = x[3*n+2]
+    Omega = min.(collect(Vinf).*tsr/Rtip, 1220)
+
+    plot(Vinf, TQ[nV+1:2nV] .*Omega, xlabel="wind speed [m/s]", ylabel="power [W]", title = "expected power = $(- round(eval_f(res); digits=4)) W",  legend=nothing)
+    eval_f(x)
+
+    plot(Vinf, Omega)
+
+
 """
+    #x = readdlm("BEMTOptiTestRUN.dat")
+    function BEMTwrapper2(x; Ncut=20)
+        n = Ncut
+        r = x[1:n]
+        chord = x[n+1:2*n]
+        theta = x[2*n+1:3*n]
 
-#x = readdlm("BEMTOptiTestRUN.dat")
-function BEMTwrapper2(x; Ncut=20)
-    n = Ncut
-	r = x[1:n]
-	chord = x[n+1:2*n]
-	theta = x[2*n+1:3*n]
+        Rhub = x[3*n+1]
+        Rtip = x[3*n+2]
 
-	Rhub = x[3*n+1]
-	Rtip = x[3*n+2]
+        Vinf = x[3*n+3]
+        Omega = x[3*n+4]
+        rho = x[3*n+5]
 
-	Vinf = x[3*n+3]
-	Omega = x[3*n+4]
-	rho = x[3*n+5]
+        r = LinRange( Rhub/Rtip, 1., Ncut+2 )[2:end-1] *Rtip
+        chord = akima(rP, chordP, r)
+        theta = akima(rP, thetaP, r)
 
-	r = LinRange( Rhub/Rtip, 1., Ncut+2 )[2:end-1] *Rtip
-	chord = akima(rP, chordP, r)
-	theta = akima(rP, thetaP, r)
+        rotor = Rotor(Rtip, Rhub, N)
+        sections = Section.(r, chord, theta, interpCLCDstruct(airfoildata)..., (r)->1, N*chord ./(2*pi*r))
+        op = OpCond(Vinf, Omega, rho)
 
-	rotor = Rotor(Rtip, Rhub, N)
-	sections = Section.(r, chord, theta, interpCLCDstruct(airfoildata)..., (r)->1, N*chord ./(2*pi*r))
-	op = OpCond(Vinf, Omega, rho)
+        sols = Solve.(Ref(rotor), sections, Ref(op))
+        outputs = StructArray(sols)
 
-	sols = Solve.(Ref(rotor), sections, Ref(op))
-	outputs = StructArray(sols)
+        T = ThrustTotal(outputs, sections, rotor, op)
+        Q = TorqueTotal(outputs, sections, rotor, op)
 
-    T = ThrustTotal(outputs, sections, rotor, op)
-    Q = TorqueTotal(outputs, sections, rotor, op)
-
-    return [T; Q], outputs
-end
+        return [T; Q], outputs
+    end
 
 
-sols, outs = BEMTwrapper2(OptiRes)
+    sols, outs = BEMTwrapper2(OptiRes)
 
-#outs.Qprime |> plot"""
-
-tsr = 2
-rotorR = 0.55
-Vin = 3.0
-Vout = 25.0
-V = range(Vin, Vout, length=10)
-# Omega_min = 0.0
-Omega_max = 12.0*pi/30.0
-Omega = min.(collect(V).*tsr/rotorR, Omega_max)  
-collect(V).*tsr/rotorR
+    #outs.Qprime |> plot
+"""

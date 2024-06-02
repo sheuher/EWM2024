@@ -245,33 +245,33 @@ begin
 	Rhub = 0.135
 	N = 3
 	Vinf = 10.
-	#Nparam = 5
-	Ncut = 20
-	Omega = 125.0/60*2*pi
+	Nparam = 5
+	Ncut = 50
+	Omega = 500.0/60*2*pi
 	rho = 1.225
 	propgeom = [0.135/0.55   0.20   -30
 				1.00         0.15   -9]
 
-	r = LinRange( Rhub/Rtip, 1., Ncut+2 )[2:end-1] *Rtip
-	chord = LinRange( propgeom[1,2], propgeom[2,2], Ncut+2 )[2:end-1] *Rtip
-	theta = LinRange( propgeom[1,3], propgeom[2,3], Ncut+2 )[2:end-1] *pi/180
-
-	#rP = LinRange( Rhub/Rtip, 1., Nparam+2 )[2:end-1] *Rtip
-	#chordP = LinRange( propgeom[1,2], propgeom[2,2], Nparam+2 )[2:end-1] *Rtip
-	#thetaP = LinRange( propgeom[1,3], propgeom[2,3], Nparam+2 )[2:end-1] *pi/180
-
 	#r = LinRange( Rhub/Rtip, 1., Ncut+2 )[2:end-1] *Rtip
-	#chord = akima(rP, chordP, r)
-	#theta = akima(rP, thetaP, r)
+	#chord = LinRange( propgeom[1,2], propgeom[2,2], Ncut+2 )[2:end-1] *Rtip
+	#theta = LinRange( propgeom[1,3], propgeom[2,3], Ncut+2 )[2:end-1] *pi/180
 
-	x = [r; chord; theta; Rhub; Rtip; Vinf; Omega; rho]
+	rP = LinRange( (1 -Rhub/Rtip)/(Ncut+1) +Rhub/Rtip, 1 -(1 -Rhub/Rtip)/(Ncut+1), Nparam ) *Rtip
+	chordP = LinRange( propgeom[1,2], propgeom[2,2], Nparam ) *Rtip
+	thetaP = LinRange( propgeom[1,3], propgeom[2,3], Nparam ) *pi/180
+
+	r = LinRange( Rhub/Rtip, 1., Ncut+2 )[2:end-1] *Rtip
+	chord = akima(rP, chordP, r)
+	theta = akima(rP, thetaP, r)
+
+	x = [rP; chordP; thetaP; Rhub; Rtip; Vinf; Omega; rho]
 	y = zeros(2)
 
 	function BEMTwrapper(x)
-		n = Ncut
-		r = x[1:n]
-		chord = x[n+1:2*n]
-		theta = x[2*n+1:3*n]
+		n = Nparam
+		rP = x[1:n]
+		chordP = x[n+1:2*n]
+		thetaP = x[2*n+1:3*n]
 
 		Rhub = x[3*n+1]
 		Rtip = x[3*n+2]
@@ -280,9 +280,9 @@ begin
 		Omega = x[3*n+4]
 		rho = x[3*n+5]
 
-		#r = LinRange( Rhub/Rtip, 1., Ncut+2 )[2:end-1] *Rtip
-		#chord = akima(rP, chordP, r)
-		#theta = akima(rP, thetaP, r)
+		r = LinRange( Rhub/Rtip, 1., Ncut+2 )[2:end-1] *Rtip
+		chord = akima(rP, chordP, r)
+		theta = akima(rP, thetaP, r)
 
 		rotor = Rotor(Rtip, Rhub, N)
 		sections = Section.(r, chord, theta, interpCLCDstruct(airfoildata)..., (r)->1, N*chord ./(2*pi*r))
@@ -300,9 +300,8 @@ begin
 	#ForwardDiff.jacobian(BEMTwrapper, x)
 end 
 
-
 function eval_f(x)
-	n = Ncut
+	n = Nparam
 	return - BEMTwrapper(x)[2] * x[3*n+4]
 end
 
@@ -324,87 +323,55 @@ function eval_jac_g(
 )
 
     if values === nothing
-        # m = 2
-        # n = 305
+        # m = num of constraint
+        # n = num of parameters
         id = 1
         for m in 1:2
-            for n in 1:3*Ncut +5
+            for n in 1:3*Nparam +5
                 rows[id] = n
                 cols[id] = m
                 id += 1
             end
         end
     else
-        jac = zeros(2,3*Ncut +5)
+        jac = zeros(2,3*Nparam +5)
         ForwardDiff.jacobian!(jac, (y,x)->eval_g(x,y), zeros(2), x)
         values .= vec( jac ) 
     end
     return nothing
 end
 
-# jac = zeros(2*65)
-# rows = zeros(2*65)
-# cols = zeros(2*65)
-# eval_jac_g(x, rows, cols, jac)
-# jac
-# hes = ForwardDiff.jacobian(x -> ForwardDiff.jacobian((x)->begin
-# 	T,Q = BEMTwrapper(x)
-# 	[Q; T]
-# 	end, x), x)
 
-nzJ = 2 *(Ncut*3 +5) #- 4
-nzH = 2 *(Ncut*3 +5)^2 - 6902 #130*65 - 6902
-n = 3*Ncut +5
+#hes = ForwardDiff.jacobian(x -> ForwardDiff.jacobian((x)->begin
+#	T,Q = BEMTwrapper(x)
+#	[Q; T]
+#	end, x), x)
+
+nzJ = 2 *(Nparam*3 +5) 
+nzH = 2 *(Nparam*3 +5)^2
+n = 3*Nparam +5
 m = 2
 #x = [r; chord; theta; Rhub; Rtip; Vinf; Omega; rho]
-
 begin
 
-	#r = LinRange( Rhub/Rtip, 1., Ncut+2 )[2:end-1] *Rtip
-	chord_L = 0.05 *ones(Ncut)
-	chord_U = 0.35 *ones(Ncut) *Rtip
-	theta_L = -pi/6 *ones(Ncut)
-	theta_U = -5*pi/180 *ones(Ncut)
+	rP = LinRange( (1 -Rhub/Rtip)/(Ncut+1) +Rhub/Rtip, 1 -(1 -Rhub/Rtip)/(Ncut+1), Nparam ) *Rtip
+	chordP_L = 0.03 *ones(Nparam)
+	chordP_U = 0.2 *ones(Nparam) *Rtip
+	thetaP_L = -pi/6 *ones(Nparam)
+	thetaP_U = 5 *ones(Nparam)
 
-	Omega_L = 12.
+	Omega_L = 0.01
 	Omega_U = 1220.
 
-	x_L = [r; chord_L; theta_L; Rhub; Rtip; Vinf; Omega_L; rho]
-	x_U = [r; chord_U; theta_U; Rhub; Rtip; Vinf; Omega_U; rho]
+	x_L = [rP; chordP_L; thetaP_L; Rhub; Rtip; Vinf; Omega_L; rho]
+	x_U = [rP; chordP_U; thetaP_U; Rhub; Rtip; Vinf; Omega_U; rho]
 	
 end
-
-"""
-	jac = ForwardDiff.jacobian((x)->begin
-	T,Q = BEMTwrapper(x)
-	[Q; T]
-	end, x)
-	count(x->x==0, jac)
-
-
-	hes = ForwardDiff.jacobian(x -> ForwardDiff.jacobian((x)->begin
-	T,Q = BEMTwrapper(x)
-	[Q; T]
-	end, x), x)
-	show(hes)
-	count(x->x==0, hes)
-	1, 16*8 - 34
-	34 - 4*8
-	2, 22*11 -98
-	98 - 4*11
-	4, 34*17 - 278
-	10, 70*35 - 1682
-	20, 130*65 - 6902
-
-	22*11 : 98
-	34*17 : 144
-"""
-
 #g_L = [3.27-0.11; -Inf]
 #g_U = [3.27+0.11; 35]
 
-g_L = [1.27; 0.01]
-g_U = [5.27; 35]
+g_L = [3.; 0.01]
+g_U = [15.; 25]
 
 prob = Ipopt.CreateIpoptProblem(
     n,
@@ -437,87 +404,79 @@ BEMTwrapper(res)
 println(res)
 println(objective)
 
-writedlm("BEMTOptiTestRUN.dat", res)
-
-outputs = BEMTwrapper(res)
-
-println("BEMT")
-println(BEMTwrapper(res))
-
-using CCBlade
-function CCbladewrapper(x)
-    n = Ncut
-    r = x[1:n]
-    chord = x[n+1:2*n]
-    theta = - x[2*n+1:3*n]
-
-    Rhub = x[3*n+1]
-    Rtip = x[3*n+2]
-
-    Vinf = x[3*n+3]
-    Omega = x[3*n+4]
-    rho = x[3*n+5]
-
-    af = CCBlade.AlphaAF("SG6043_360_Polar_NREL_Format.dat")
-    
-    rotor = CCBlade.Rotor(Rhub, Rtip, 3; turbine=true, tip=nothing)
-    sections = CCBlade.Section.(r, chord, theta, Ref(af))
-    op = CCBlade.simple_op.(Vinf, Omega, r, rho)
-
-    sols = CCBlade.solve.(Ref(rotor), sections, op)
-
-    T,Q = thrusttorque(rotor, sections, sols)
-	return [T; Q]
-end
-
-
-println("CCBlade")
-println(CCbladewrapper(res))
-
 """
+    writedlm("BEMTOptiTestRUN.dat", res)
 
-#x = readdlm("BEMTOptiTestRUN.dat")
-function BEMTwrapper2(x; Ncut=20)
-    n = Ncut
-	r = x[1:n]
-	chord = x[n+1:2*n]
-	theta = x[2*n+1:3*n]
+    outputs = BEMTwrapper(res)
 
-	Rhub = x[3*n+1]
-	Rtip = x[3*n+2]
+    println("BEMT")
+    println(BEMTwrapper(res))
 
-	Vinf = x[3*n+3]
-	Omega = x[3*n+4]
-	rho = x[3*n+5]
+    using CCBlade
+    function CCbladewrapper(x)
+        n = Ncut
+        r = x[1:n]
+        chord = x[n+1:2*n]
+        theta = - x[2*n+1:3*n]
 
-	r = LinRange( Rhub/Rtip, 1., Ncut+2 )[2:end-1] *Rtip
-	chord = akima(rP, chordP, r)
-	theta = akima(rP, thetaP, r)
+        Rhub = x[3*n+1]
+        Rtip = x[3*n+2]
 
-	rotor = Rotor(Rtip, Rhub, N)
-	sections = Section.(r, chord, theta, interpCLCDstruct(airfoildata)..., (r)->1, N*chord ./(2*pi*r))
-	op = OpCond(Vinf, Omega, rho)
+        Vinf = x[3*n+3]
+        Omega = x[3*n+4]
+        rho = x[3*n+5]
 
-	sols = Solve.(Ref(rotor), sections, Ref(op))
-	outputs = StructArray(sols)
+        af = CCBlade.AlphaAF("SG6043_360_Polar_NREL_Format.dat")
+        
+        rotor = CCBlade.Rotor(Rhub, Rtip, 3; turbine=true, tip=nothing)
+        sections = CCBlade.Section.(r, chord, theta, Ref(af))
+        op = CCBlade.simple_op.(Vinf, Omega, r, rho)
 
-    T = ThrustTotal(outputs, sections, rotor, op)
-    Q = TorqueTotal(outputs, sections, rotor, op)
+        sols = CCBlade.solve.(Ref(rotor), sections, op)
 
-    return [T; Q], outputs
-end
+        T,Q = thrusttorque(rotor, sections, sols)
+        return [T; Q]
+    end
 
 
-sols, outs = BEMTwrapper2(OptiRes)
+    println("CCBlade")
+    println(CCbladewrapper(res))
 
-#outs.Qprime |> plot"""
 
-tsr = 2
-rotorR = 0.55
-Vin = 3.0
-Vout = 25.0
-V = range(Vin, Vout, length=10)
-# Omega_min = 0.0
-Omega_max = 12.0*pi/30.0
-Omega = min.(collect(V).*tsr/rotorR, Omega_max)  
-collect(V).*tsr/rotorR
+
+    #x = readdlm("BEMTOptiTestRUN.dat")
+    function BEMTwrapper2(x; Ncut=20)
+        n = Ncut
+        r = x[1:n]
+        chord = x[n+1:2*n]
+        theta = x[2*n+1:3*n]
+
+        Rhub = x[3*n+1]
+        Rtip = x[3*n+2]
+
+        Vinf = x[3*n+3]
+        Omega = x[3*n+4]
+        rho = x[3*n+5]
+
+        r = LinRange( Rhub/Rtip, 1., Ncut+2 )[2:end-1] *Rtip
+        chord = akima(rP, chordP, r)
+        theta = akima(rP, thetaP, r)
+
+        rotor = Rotor(Rtip, Rhub, N)
+        sections = Section.(r, chord, theta, interpCLCDstruct(airfoildata)..., (r)->1, N*chord ./(2*pi*r))
+        op = OpCond(Vinf, Omega, rho)
+
+        sols = Solve.(Ref(rotor), sections, Ref(op))
+        outputs = StructArray(sols)
+
+        T = ThrustTotal(outputs, sections, rotor, op)
+        Q = TorqueTotal(outputs, sections, rotor, op)
+
+        return [T; Q], outputs
+    end
+
+
+    sols, outs = BEMTwrapper2(OptiRes)
+
+    #outs.Qprime |> plot
+"""

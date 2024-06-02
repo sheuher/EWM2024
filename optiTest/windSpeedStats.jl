@@ -18,10 +18,12 @@ windSpeeds = comma2dot.(windDF[:,3])
 windSpeeds = windSpeeds[windSpeeds .!= 0.]
 
 windSpeedsDist =  fit_mle(Weibull, windSpeeds)
-
+windSpeedsDist
 begin
 
 histogram(windSpeeds, bins=0:0.75:40, normalize=:probability)
 plot!(0:0.1:40, pdf.(windSpeedsDist, 0:0.1:40), c=:red)
 
 end
+
+pdf.(windSpeedsDist, LinRange(3.5, 12, 10))

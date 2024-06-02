@@ -48,7 +48,7 @@ function eval_jac_g(
         ForwardDiff.jacobian!(jac, (y,x)->eval_g(x,y), zeros(2), x)
         values .= vec( jac ) 
     end
-    return values
+    return nothing
 end
 
 function eval_jac_g_ana(
